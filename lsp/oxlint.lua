@@ -9,11 +9,24 @@
 --- npm i -g oxlint
 --- ```
 ---
+--- Type-aware linting will automatically be enabled if `tsgolint` exists in your
+--- path and your `.oxlintrc.json` contains the string "typescript".
+---
 --- The default `on_attach` function provides an `:LspOxlintFixAll` command which
 --- can be used to fix all fixable diagnostics. See the `eslint` config entry for
 --- an example of how to use this to automatically fix all errors on write.
 
 local util = require 'lspconfig.util'
+
+local function oxlint_conf_mentions_typescript(root_dir)
+  local fn = vim.fs.joinpath(root_dir, '.oxlintrc.json')
+  for line in io.lines(fn) do
+    if line:find('typescript') then
+      return true
+    end
+  end
+  return false
+end
 
 ---@type vim.lsp.Config
 return {
@@ -44,5 +57,18 @@ return {
         },
       }, { bufnr = bufnr })
     end, { desc = 'Fix all Oxlint diagnostics' })
+  end,
+  before_init = function(init_params, config)
+    local settings = config.settings or {}
+    if settings.typeAware == nil and vim.fn.executable('tsgolint') == 1 then
+      local ok, res = pcall(oxlint_conf_mentions_typescript, config.root_dir)
+      if ok and res then
+        settings = vim.tbl_extend('force', settings, { typeAware = true })
+      end
+    end
+    local init_options = config.init_options or {}
+    init_options.settings = vim.tbl_extend('force', init_options.settings or {} --[[@as table]], settings)
+
+    init_params.initializationOptions = init_options
   end,
 }
